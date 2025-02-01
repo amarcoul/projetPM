@@ -1,0 +1,15 @@
+# Django
+backend/venv/
+backend/__pycache__/
+backend/*.sqlite3
+
+# Node.js
+frontend_web/node_modules/
+frontend_web/.env
+
+# Flutter
+frontend_mobile/build/
+frontend_mobile/.dart_tool/
+
+# Docker
+.env

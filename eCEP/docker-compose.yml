@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    container_name: ecep_db
+    environment:
+      POSTGRES_DB: ecep_db
+      POSTGRES_USER: ecep_user
+      POSTGRES_PASSWORD: amar
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - ecep_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecep_backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://ecep_user:amar@db:5432/ecep_db
+    networks:
+      - ecep_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecep_frontend
+    ports:
+      - "5000:5000"
+    depends_on:
+      - backend
+    networks:
+      - ecep_network
+
+networks:
+  ecep_network:
+    driver: bridge
