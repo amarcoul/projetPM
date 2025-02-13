@@ -25,8 +25,7 @@ SECRET_KEY = 'django-insecure-*cwhziytco#$ij#!smab#gnkf)xd4l0hammm!9_rh-r37s_2&4
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.100.8']
 
 # Application definition
 
@@ -42,6 +41,7 @@ INSTALLED_APPS = [
     'ecep_api',
     'drf_yasg',
     'corsheaders',
+    'django_extensions',
 ]
 CORS_ALLOW_ALL_ORIGINS = True
 MIDDLEWARE = [
@@ -138,3 +138,18 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
 }
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  # Serveur SMTP de Gmail
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'amarcoulibaly827@gmail.com'  # Remplace par ton e-mail
+EMAIL_HOST_PASSWORD = 'skvx axcu ybeu djuh'  # Remplace par ton mot de passe
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+import os
+MEDIA_URL = '/lecons_pdfs/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'lecons_pdfs')
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static')
+]

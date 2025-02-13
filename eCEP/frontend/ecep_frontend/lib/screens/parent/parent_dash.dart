@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../auth/login.dart';
+import 'parentlogin.dart';
 
 class ParentDashboard extends StatelessWidget {
   Future<void> _logout(BuildContext context) async {
@@ -10,7 +10,7 @@ class ParentDashboard extends StatelessWidget {
     // Rediriger vers la page de connexion et empêcher le retour en arrière
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => LoginScreen()),
+      MaterialPageRoute(builder: (_) => ParentLoginPage()),
     );
   }
 

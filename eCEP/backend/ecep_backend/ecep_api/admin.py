@@ -1,7 +1,9 @@
 from django.contrib import admin
-from .models import User, Course, Exercise, LearningResult, Badge, UserBadge, Exam, ExamExercise, LearningHistory, Payment, Admin
+from .models import Answer,Question,StudentProgress,Lecon,Chapitre,Eleve,Etablissement,Parent,Enseignant,User, Course, Exercise, LearningResult, Badge, UserBadge, Exam, ExamExercise, LearningHistory, Payment, Admin
 
 admin.site.register(User)
+admin.site.register(Lecon)
+admin.site.register(Chapitre)
 admin.site.register(Course)
 admin.site.register(Exercise)
 admin.site.register(LearningResult)
@@ -12,3 +14,10 @@ admin.site.register(ExamExercise)
 admin.site.register(LearningHistory)
 admin.site.register(Payment)
 admin.site.register(Admin)
+admin.site.register(Eleve)
+admin.site.register(Etablissement)
+admin.site.register(Parent)
+admin.site.register(Enseignant)
+admin.site.register(StudentProgress)
+admin.site.register(Question)
+admin.site.register(Answer)
