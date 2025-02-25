@@ -8,6 +8,8 @@ import 'historique.dart';
 import 'suivis.dart'; 
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+
 
 class EleveDashboard extends StatefulWidget {
   final String userId;
@@ -118,16 +120,16 @@ class _EleveDashboardState extends State<EleveDashboard> {
                 );
               },
             ),
-            ListTile(
-              leading: Icon(Icons.assignment),
-              title: Text('Exercices'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ExercicesPage()),
-                );
-              },
-            ),
+             ListTile(
+                leading: Icon(Icons.assignment),
+                title: Text('Exercices'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ExercisesPage()),
+                  );
+                },
+              ),
             ListTile(
               leading: Icon(Icons.history),
               title: Text('Historique des apprentissages'),

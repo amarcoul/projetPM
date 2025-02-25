@@ -18,9 +18,11 @@ class EnseignantDashboard extends StatefulWidget {
 }
 
 class _EnseignantDashboard extends State<EnseignantDashboard> {
-   File? _profileImage;
-   final picker = ImagePicker();
-   Future<void> _pickImage() async {
+  File? _profileImage;
+  final picker = ImagePicker();
+  int coursId = 1; // Définissez une valeur temporaire ou récupérez-la dynamiquement
+
+  Future<void> _pickImage() async {
     try {
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
       if (pickedFile != null) {
@@ -32,6 +34,7 @@ class _EnseignantDashboard extends State<EnseignantDashboard> {
       print("Erreur lors de la sélection de l'image: $e");
     }
   }
+
   Future<void> _logout(BuildContext context) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.clear(); // Supprime toutes les données stockées (token, rôle, etc.)
@@ -43,7 +46,7 @@ class _EnseignantDashboard extends State<EnseignantDashboard> {
     );
   }
 
-    @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -122,7 +125,7 @@ class _EnseignantDashboard extends State<EnseignantDashboard> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => ExercicesEvaluationsPage()),
+                  MaterialPageRoute(builder: (_) => ExercisesEvaluationsPage(courseId: coursId)), // Utilisez coursId
                 );
               },
             ),

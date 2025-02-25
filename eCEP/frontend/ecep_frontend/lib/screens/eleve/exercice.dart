@@ -1,259 +1,230 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
+import 'package:provider/provider.dart';
 
-class ExercicesPage extends StatefulWidget {
-  @override
-  _ExercisePageState createState() => _ExercisePageState();
-}
 
-class _ExercisePageState extends State<ExercicesPage> {
-  List<dynamic> exercises = [];
-  List<dynamic> filteredExercises = [];
-  bool isLoading = true;
-  String searchQuery = "";
-  String? selectedSubject;
-  Map<String, Map<int, List<int>>> selectedAnswers = {};
-  bool isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchExercises();
-  }
-
-  void _fetchExercises() async {
-  try {
-    final response = await http.get(Uri.parse("http://192.168.100.8:8000/api/exercises/"));
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      print(data); // Affiche les données reçues pour vérification
-      if (mounted) {
-        setState(() {
-          exercises = data;
-          filteredExercises = exercises;
-          isLoading = false;
-        });
-      }
-    }
-  } catch (e) {
-    if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
-      _showError("Failed to load exercises");
-    }
-  }
-}
-
-  void _filterExercises() {
-    setState(() {
-      filteredExercises = exercises.where((exercise) {
-        bool matchesSearch = exercise['title'].toString().toLowerCase().contains(searchQuery.toLowerCase());
-        bool matchesSubject = selectedSubject == null || exercise['course_title'] == selectedSubject;
-        return matchesSearch && matchesSubject;
-      }).toList();
-    });
-  }
-
-  Future<void> _submitExercise(int exerciseId) async {
-  if (!selectedAnswers.containsKey(exerciseId.toString())) {
-    _showError("Please answer at least one question");
-    return;
-  }
-
-  setState(() => isSubmitting = true);
-
-  try {
-    final answers = selectedAnswers[exerciseId.toString()]!.entries.map((entry) {
-      return {
-        'question_id': entry.key,
-        'selected_answers': entry.value,
-      };
-    }).toList();
-
-    final response = await http.post(
-      Uri.parse("http://192.168.100.8:8000/api/exercises/submit/"),
-      headers: {"Content-Type": "application/json"},
-      body: json.encode({
-        'exercise_id': exerciseId,
-        'answers': answers,
-      }),
-    );
-
-    print("Status Code: ${response.statusCode}"); // Affiche le code de statut
-    print("Response Body: ${response.body}"); // Affiche le corps de la réponse
-
-    if (response.statusCode == 200) {
-      final result = json.decode(response.body);
-      _showResults(result);
-      _updateExerciseProgress(exerciseId, result['score']);
-    } else {
-      _showError("Failed to submit exercise: ${response.body}");
-    }
-  } catch (e) {
-    _showError("An error occurred: $e");
-  } finally {
-    setState(() => isSubmitting = false);
-  }
-}
-  void _updateExerciseProgress(int exerciseId, double score) {
-    setState(() {
-      final index = exercises.indexWhere((e) => e['id'] == exerciseId);
-      if (index != -1) {
-        exercises[index]['progress'] = score;
-        _filterExercises();
-      }
-    });
-  }
-
-  void _showResults(Map<String, dynamic> result) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        minChildSize: 0.5,
-        builder: (context, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Text(
-                "Results",
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 20),
-              _buildResultCard(
-                "Score",
-                "${result['score'].toStringAsFixed(1)}%",
-                Icons.score,
-                Colors.blue,
-              ),
-              SizedBox(height: 12),
-              _buildResultCard(
-                "Correct Answers",
-                "${result['correct_count']} / ${result['total_questions']}",
-                Icons.check_circle,
-                Colors.green,
-              ),
-              SizedBox(height: 20),
-              Text(
-                "Correction",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  child: Text(
-                    result['correction'] ?? "No correction available",
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResultCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 32),
-            SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
+// SearchDialog Widget
+class SearchDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Search Exercises'),
+      content: TextField(
+        onChanged: (value) {
+          context.read<ExerciseProvider>().setSearchQuery(value);
+        },
+        decoration: InputDecoration(
+          hintText: 'Enter search term...',
+          prefixIcon: Icon(Icons.search),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+// FilterBottomSheet Widget
+class FilterBottomSheet extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<ExerciseProvider>();
+    final subjects = provider.exercises
+        .map((e) => e['course_title'] as String)
+        .toSet()
+        .toList();
+
+    return Container(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Filter by Subject',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 16),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: subjects.length,
+              itemBuilder: (context, index) {
+                final subject = subjects[index];
+                return ListTile(
+                  title: Text(subject),
+                  trailing: provider.selectedSubject == subject
+                      ? Icon(Icons.check, color: Colors.blue)
+                      : null,
+                  onTap: () {
+                    provider.setSelectedSubject(
+                      provider.selectedSubject == subject ? null : subject
+                    );
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// State management for exercises
+class ExerciseProvider extends ChangeNotifier {
+  List<dynamic> _exercises = [];
+  List<dynamic> _filteredExercises = [];
+  bool _isLoading = true;
+  String _searchQuery = "";
+  String? _selectedSubject;
+  Map<String, Map<int, List<int>>> _selectedAnswers = {};
+
+  List<dynamic> get exercises => _exercises;
+  List<dynamic> get filteredExercises => _filteredExercises;
+  bool get isLoading => _isLoading;
+  String get searchQuery => _searchQuery;
+  String? get selectedSubject => _selectedSubject;
+  Map<String, Map<int, List<int>>> get selectedAnswers => _selectedAnswers;
+
+  Future<void> fetchExercises() async {
+    try {
+      final response = await http.get(Uri.parse("http://192.168.100.8:8000/api/exercises/"));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _exercises = data;
+        _filteredExercises = data;
+        _isLoading = false;
+        notifyListeners();
+      }
+    } catch (e) {
+      _isLoading = false;
+      notifyListeners();
+      throw Exception('Failed to load exercises');
+    }
+  }
+
+  void filterExercises() {
+    _filteredExercises = _exercises.where((exercise) {
+      bool matchesSearch = exercise['title'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+      bool matchesSubject = _selectedSubject == null || exercise['course_title'] == _selectedSubject;
+      return matchesSearch && matchesSubject;
+    }).toList();
+    notifyListeners();
+  }
+
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    filterExercises();
+  }
+
+  void setSelectedSubject(String? subject) {
+    _selectedSubject = subject;
+    filterExercises();
+  }
+
+  void updateAnswers(String exerciseId, int questionId, int answerId, bool isSelected) {
+    _selectedAnswers[exerciseId] ??= {};
+    _selectedAnswers[exerciseId]![questionId] ??= [];
+    
+    if (isSelected) {
+      _selectedAnswers[exerciseId]![questionId]!.add(answerId);
+    } else {
+      _selectedAnswers[exerciseId]![questionId]!.remove(answerId);
+    }
+    notifyListeners();
+  }
+}
+
+// Main Exercise Page
+class ExercisesPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => ExerciseProvider()..fetchExercises(),
+        ),
+      ],
+      child: ExercisesView(),
+    );
+  }
+}
+
+class ExercisesView extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<ExerciseProvider>();
+
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          _buildAppBar(),
-          if (isLoading)
+          _buildAppBar(context),
+          if (provider.isLoading)
             SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                ),
+              ),
+            )
+          else if (provider.filteredExercises.isEmpty)
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.search_off, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text(
+                      'No exercises found',
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             )
           else
             SliverPadding(
               padding: EdgeInsets.all(16),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildExerciseCard(filteredExercises[index]),
-                  childCount: filteredExercises.length,
+                  (context, index) => ExerciseCard(
+                    exercise: provider.filteredExercises[index],
+                  ),
+                  childCount: provider.filteredExercises.length,
                 ),
               ),
             ),
         ],
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showFilterOptions(context),
+        child: Icon(Icons.filter_list),
+        tooltip: 'Filter exercises',
+      ),
     );
   }
 
-  Widget _buildAppBar() {
+  Widget _buildAppBar(BuildContext context) {
     return SliverAppBar(
       expandedHeight: 120,
       floating: true,
       pinned: true,
       flexibleSpace: FlexibleSpaceBar(
-        title: Text("Exercises"),
+        title: Text('Exercises'),
         background: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -267,17 +238,38 @@ class _ExercisePageState extends State<ExercicesPage> {
       actions: [
         IconButton(
           icon: Icon(Icons.search),
-          onPressed: () => _showSearchDialog(),
-        ),
-        IconButton(
-          icon: Icon(Icons.filter_list),
-          onPressed: () => _showFilterDialog(),
+          onPressed: () => _showSearchDialog(context),
         ),
       ],
     );
   }
 
-  Widget _buildExerciseCard(Map<String, dynamic> exercise) {
+  void _showSearchDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => SearchDialog(),
+    );
+  }
+
+  void _showFilterOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => FilterBottomSheet(),
+    );
+  }
+}
+
+// Exercise Card Widget
+class ExerciseCard extends StatelessWidget {
+  final Map<String, dynamic> exercise;
+
+  const ExerciseCard({Key? key, required this.exercise}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
     final progress = (exercise['progress'] ?? 0.0) / 100;
     
     return Card(
@@ -285,23 +277,22 @@ class _ExercisePageState extends State<ExercicesPage> {
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
-        onTap: () => _showExerciseDetails(exercise),
+        onTap: () => _navigateToDetail(context),
         borderRadius: BorderRadius.circular(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildExerciseHeader(exercise),
-            Divider(),
-            _buildExerciseBody(exercise),
-            if (progress > 0)
-              _buildProgressIndicator(progress),
+            _buildHeader(),
+            Divider(height: 1),
+            _buildBody(),
+            if (progress > 0) _buildProgress(progress),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildExerciseHeader(Map<String, dynamic> exercise) {
+  Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -331,21 +322,33 @@ class _ExercisePageState extends State<ExercicesPage> {
               ],
             ),
           ),
-          _buildDifficultyBadge(exercise['difficulty_level']?? 1),
+          _buildDifficultyBadge(exercise['difficulty_level'] ?? 1),
         ],
       ),
     );
   }
 
-  Widget _buildExerciseBody(Map<String, dynamic> exercise) {
+  Widget _buildBody() {
+    final type = exercise['type'] ?? 'qcm';
+    final typeIcon = {
+      'quiz': Icons.timer,
+      'pdf': Icons.picture_as_pdf,
+      'qcm': Icons.check_box,
+    }[type] ?? Icons.help_outline;
+
     return Padding(
       padding: EdgeInsets.all(16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
           _buildInfoItem(
+            typeIcon,
+            _getTypeLabel(type),
+            'Type',
+          ),
+          _buildInfoItem(
             Icons.help_outline,
-            '${(exercise['questions'] as List).length}',
+            '${(exercise['questions'] as List?)?.length ?? 0}',
             'Questions',
           ),
           _buildInfoItem(
@@ -353,14 +356,22 @@ class _ExercisePageState extends State<ExercicesPage> {
             '${exercise['duration']}',
             'Minutes',
           ),
-          _buildInfoItem(
-            Icons.assessment,
-            '${(exercise['progress'] ?? 0).toStringAsFixed(0)}%',
-            'Progress',
-          ),
         ],
       ),
     );
+  }
+
+  String _getTypeLabel(String type) {
+    switch (type) {
+      case 'quiz':
+        return 'Quiz';
+      case 'pdf':
+        return 'PDF';
+      case 'qcm':
+        return 'QCM';
+      default:
+        return 'Unknown';
+    }
   }
 
   Widget _buildInfoItem(IconData icon, String value, String label) {
@@ -386,7 +397,7 @@ class _ExercisePageState extends State<ExercicesPage> {
     );
   }
 
-  Widget _buildProgressIndicator(double progress) {
+  Widget _buildProgress(double progress) {
     return Container(
       padding: EdgeInsets.all(16),
       child: Column(
@@ -445,116 +456,28 @@ class _ExercisePageState extends State<ExercicesPage> {
     );
   }
 
-  void _showExerciseDetails(Map<String, dynamic> exercise) {
-  // Vérifiez que les propriétés nécessaires ne sont pas null
-  if (exercise['title'] == null || exercise['subject'] == null || exercise['questions'] == null) {
-    _showError("Exercise data is incomplete");
-    return;
-  }
-
+  void _navigateToDetail(BuildContext context) {
   Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (context) => ExerciseDetailPage(
-        exercise: exercise,
-        onSubmit: _submitExercise,
-        onAnswerSelected: (questionId, answerId, isSelected) {
-          setState(() {
-            final exerciseId = exercise['id'].toString();
-            selectedAnswers[exerciseId] ??= {};
-            selectedAnswers[exerciseId]![questionId] ??= [];
-            
-            if (isSelected) {
-              selectedAnswers[exerciseId]![questionId]!.add(answerId);
-            } else {
-              selectedAnswers[exerciseId]![questionId]!.remove(answerId);
-            }
-          });
-        },
+      builder: (context) => ChangeNotifierProvider.value(
+        value: context.read<ExerciseProvider>(),
+        child: ExerciseDetailPage(exercise: exercise),
       ),
     ),
   );
 }
 
-  void _showSearchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Search Exercises"),
-        content: TextField(
-          onChanged: (value) {
-            searchQuery = value;
-            _filterExercises();
-          },
-          decoration: InputDecoration(
-            hintText: "Enter exercise title",
-            prefixIcon: Icon(Icons.search),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Close"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showFilterDialog() {
-    final subjects = exercises
-        .map((e) => e['course_title'].toString())
-        .toSet()
-        .toList();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Filter by Subject"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                title: Text("All Subjects"),
-                selected: selectedSubject == null,
-                onTap: () {
-                  setState(() {
-                    selectedSubject = null;
-                    _filterExercises();
-                  });
-                  Navigator.pop(context);
-                },
-              ),
-              ...subjects.map((subject) => ListTile(
-                title: Text(subject),
-                selected: selectedSubject == subject,
-                onTap: () {
-                  setState(() {
-                    selectedSubject = subject;
-                    _filterExercises();
-                  });
-                  Navigator.pop(context);
-                },
-              )).toList(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
+
+// Exercise Detail Page
 class ExerciseDetailPage extends StatefulWidget {
   final Map<String, dynamic> exercise;
-  final Function(int) onSubmit;
-  final Function(int, int, bool) onAnswerSelected;
 
   const ExerciseDetailPage({
     Key? key,
     required this.exercise,
-    required this.onSubmit,
-    required this.onAnswerSelected,
   }) : super(key: key);
 
   @override
@@ -562,131 +485,179 @@ class ExerciseDetailPage extends StatefulWidget {
 }
 
 class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
-  Map<int, List<int>> selectedAnswers = {};
+  late Timer? timer;
+  int timeSpent = 0;
   bool isSubmitting = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(
-                widget.exercise['title'],
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              background: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Colors.blue, Colors.blue.shade800],
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.assignment,
-                    size: 64,
-                    color: Colors.white.withOpacity(0.5),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildExerciseInfo(),
-                  SizedBox(height: 24),
-                  Text(
-                    "Questions",
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildQuestionCard(
-                widget.exercise['questions'][index],
-                index + 1,
-              ),
-              childCount: widget.exercise['questions'].length,
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: isSubmitting
-                    ? null
-                    : () => widget.onSubmit(widget.exercise['id']),
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: isSubmitting
-                    ? CircularProgressIndicator(color: Colors.white)
-                    : Text(
-                        "Submit Answers",
-                        style: TextStyle(fontSize: 18),
-                      ),
-              ),
-            ),
-          ),
-        ],
+  void initState() {
+    super.initState();
+    if (widget.exercise['type'] == 'quiz') {
+      startTimer();
+    }
+  }
+
+  void startTimer() {
+    timer = Timer.periodic(Duration(seconds: 1), (timer) {
+      setState(() {
+        timeSpent++;
+        if (timeSpent >= widget.exercise['duration'] * 60) {
+          submitExercise();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> submitExercise() async {
+    if (isSubmitting) return;
+
+    setState(() => isSubmitting = true);
+    timer?.cancel();
+
+    try {
+      final provider = context.read<ExerciseProvider>();
+      final answers = provider.selectedAnswers[widget.exercise['id'].toString()]
+          ?.entries
+          .map((entry) => {
+                'question_id': entry.key,
+                'selected_answers': entry.value,
+              })
+          .toList() ??
+          [];
+
+      final response = await http.post(
+        Uri.parse("http://192.168.100.8:8000/api/exercises/submit/"),
+        headers: {"Content-Type": "application/json"},
+        body: json.encode({
+          'exercise_id': widget.exercise['id'],
+          'answers': answers,
+          'time_spent': timeSpent,
+          'completed': widget.exercise['type'] == 'pdf',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        _showResults(result);
+      } else {
+        throw Exception('Failed to submit exercise');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      setState(() => isSubmitting = false);
+    }
+  }
+
+  void _showResults(Map<String, dynamic> result) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        builder: (context, scrollController) => ResultsSheet(
+          result: result,
+          scrollController: scrollController,
+        ),
       ),
     );
   }
 
-Widget _buildExerciseInfo() {
-  return Card(
-    elevation: 2,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        children: [
-          _buildInfoRow(
-            Icons.school,
-            "Subject",
-            widget.exercise['subject'] ?? 'No Subject', // Gestion de nullité
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: Provider.of<ExerciseProvider>(context, listen: false),
+      child: Builder(
+        builder: (context) => Scaffold(
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          _buildAppBar(),
+          SliverToBoxAdapter(
+            child: Column(
+              children: [
+                if (widget.exercise['type'] == 'quiz') _buildTimer(),
+                _buildExerciseInfo(),
+              ],
+            ),
           ),
-          Divider(height: 24),
-          _buildInfoRow(
-            Icons.timer,
-            "Duration",
-            "${widget.exercise['duration'] ?? 0} minutes", // Gestion de nullité
-          ),
-          Divider(height: 24),
-          _buildInfoRow(
-            Icons.trending_up,
-            "Difficulty",
-            _getDifficultyText(widget.exercise['difficulty_level'] ?? 1), // Gestion de nullité
-            _getDifficultyColor(widget.exercise['difficulty_level'] ?? 1), // Gestion de nullité
+          _buildContent(),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: _buildSubmitButton(),
+            ),
           ),
         ],
       ),
     ),
+    ),
   );
-}
+  }
+// Continuation de la classe _ExerciseDetailPageState...
+
+  Widget _buildAppBar() {
+    return SliverAppBar(
+      expandedHeight: 200,
+      pinned: true,
+      flexibleSpace: FlexibleSpaceBar(
+        title: Text(
+          widget.exercise['title'] ?? 'Exercise',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.blue, Colors.blue.shade800],
+                ),
+              ),
+            ),
+            Center(
+              child: Icon(
+                _getExerciseTypeIcon(),
+                size: 64,
+                color: Colors.white.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getExerciseTypeIcon() {
+    switch (widget.exercise['type']) {
+      case 'quiz':
+        return Icons.timer;
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'qcm':
+        return Icons.check_box;
+      default:
+        return Icons.assignment;
+    }
+  }
 
   Widget _buildInfoRow(IconData icon, String label, String value, [Color? valueColor]) {
     return Row(
@@ -703,12 +674,13 @@ Widget _buildExerciseInfo() {
                 fontSize: 14,
               ),
             ),
+            SizedBox(height: 4),
             Text(
               value,
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: valueColor,
+                color: valueColor ?? Colors.black87,
               ),
             ),
           ],
@@ -717,110 +689,308 @@ Widget _buildExerciseInfo() {
     );
   }
 
+  Widget _buildTimer() {
+    final minutes = timeSpent ~/ 60;
+    final seconds = timeSpent % 60;
+    final duration = widget.exercise['duration'] * 60;
+    final remainingTime = duration - timeSpent;
+    final remainingMinutes = remainingTime ~/ 60;
+    final remainingSeconds = remainingTime % 60;
+
+    return Container(
+      margin: EdgeInsets.all(16),
+      padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.timer, color: Colors.blue),
+          SizedBox(width: 8),
+          Text(
+            'Time Remaining: ${remainingMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.blue.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExerciseInfo() {
+    return Card(
+      margin: EdgeInsets.all(16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildInfoRow(
+              Icons.school,
+              "Subject",
+              widget.exercise['subject'] ?? 'No Subject',
+            ),
+            Divider(height: 24),
+            _buildInfoRow(
+              Icons.timer,
+              "Duration",
+              "${widget.exercise['duration']} minutes",
+            ),
+            Divider(height: 24),
+            _buildInfoRow(
+              Icons.trending_up,
+              "Difficulty",
+              _getDifficultyText(widget.exercise['difficulty_level'] ?? 1),
+              _getDifficultyColor(widget.exercise['difficulty_level'] ?? 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    switch (widget.exercise['type']) {
+      case 'pdf':
+        return SliverToBoxAdapter(
+          child: _buildPdfViewer(),
+        );
+      case 'quiz':
+      case 'qcm':
+      default:
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) => _buildQuestionCard(
+              widget.exercise['questions'][index],
+              index + 1,
+            ),
+            childCount: (widget.exercise['questions'] as List?)?.length ?? 0,
+          ),
+        );
+    }
+  }
+
+  Widget _buildPdfViewer() {
+    if (widget.exercise['pdf_file'] == null) {
+      return Center(
+        child: Text('No PDF file available'),
+      );
+    }
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.6,
+      margin: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: PDFView(
+          filePath: widget.exercise['pdf_file'],
+          enableSwipe: true,
+          swipeHorizontal: true,
+          autoSpacing: false,
+          pageFling: false,
+          onError: (error) {
+            print(error.toString());
+          },
+          onPageError: (page, error) {
+            print('$page: ${error.toString()}');
+          },
+        ),
+      ),
+    );
+  }
+
   Widget _buildQuestionCard(Map<String, dynamic> question, int questionNumber) {
-  return Card(
-    margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Padding(
-      padding: EdgeInsets.all(16),
+    final answers = question['answers'] as List? ?? [];
+    
+    return Card(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          _buildQuestionHeader(question, questionNumber),
+          ...answers.map((answer) => _buildAnswerTile(answer, question['id'])),
+          if (widget.exercise['type'] == 'quiz')
+            _buildExplanationBox(question['explanation']),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuestionHeader(Map<String, dynamic> question, int questionNumber) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              questionNumber.toString(),
+              style: TextStyle(
+                color: Colors.blue.shade700,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              question['text'] ?? 'No question text',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnswerTile(Map<String, dynamic> answer, int questionId) {
+    final provider = context.watch<ExerciseProvider>();
+    final answerId = answer['id'];
+    final isSelected = provider.selectedAnswers[widget.exercise['id'].toString()]
+            ?.containsKey(questionId) ??
+        false;
+
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSelected ? Colors.blue : Colors.grey.shade300,
+        ),
+        color: isSelected ? Colors.blue.shade50 : null,
+      ),
+      child: InkWell(
+        onTap: () => _handleAnswerSelection(questionId, answerId),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
             children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  "$questionNumber",
-                  style: TextStyle(
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              Icon(
+                isSelected ? Icons.check_circle : Icons.circle_outlined,
+                color: isSelected ? Colors.blue : Colors.grey,
               ),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  question['text'] ?? 'No Question Text', // Gestion de nullité
+                  answer['text'] ?? 'No answer text',
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                    color: isSelected ? Colors.blue.shade700 : Colors.black87,
                   ),
                 ),
               ),
             ],
           ),
-          SizedBox(height: 16),
-          ...(question['answers'] ?? []).map<Widget>((answer) => _buildAnswerTile(
-            answer,
-            question['id'],
-          )),
-        ],
-      ),
-    ),
-  );
-}
-
-  Widget _buildAnswerTile(Map<String, dynamic> answer, int questionId) {
-  final answerId = answer['id'];
-  final isSelected = selectedAnswers[questionId]?.contains(answerId) ?? false;
-
-  return Container(
-    margin: EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: isSelected ? Colors.blue : Colors.grey.shade300,
-      ),
-      color: isSelected ? Colors.blue.shade50 : null,
-    ),
-    child: InkWell(
-      onTap: () {
-        setState(() {
-          if (selectedAnswers[questionId] == null) {
-            selectedAnswers[questionId] = [];
-          }
-          
-          if (isSelected) {
-            selectedAnswers[questionId]!.remove(answerId);
-          } else {
-            selectedAnswers[questionId]!.add(answerId);
-          }
-          
-          widget.onAnswerSelected(questionId, answerId, !isSelected);
-        });
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(
-              isSelected ? Icons.check_circle : Icons.circle_outlined,
-              color: isSelected ? Colors.blue : Colors.grey,
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                answer['text'] ?? 'No Answer Text', // Gestion de nullité
-                style: TextStyle(
-                  color: isSelected ? Colors.blue.shade700 : Colors.black87,
-                ),
-              ),
-            ),
-          ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  void _handleAnswerSelection(int questionId, int answerId) {
+    final provider = context.read<ExerciseProvider>();
+    final exerciseId = widget.exercise['id'].toString();
+    final isCurrentlySelected = provider
+            .selectedAnswers[exerciseId]?[questionId]
+            ?.contains(answerId) ??
+        false;
+    
+    provider.updateAnswers(
+      exerciseId,
+      questionId,
+      answerId,
+      !isCurrentlySelected,
+    );
+  }
+
+  Widget _buildExplanationBox(String? explanation) {
+    if (explanation == null || explanation.isEmpty) return SizedBox();
+
+    return Container(
+      margin: EdgeInsets.all(16),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange),
+              SizedBox(width: 8),
+              Text(
+                'Explanation',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade800,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            explanation,
+            style: TextStyle(color: Colors.orange.shade900),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return ElevatedButton(
+      onPressed: isSubmitting ? null : submitExercise,
+      style: ElevatedButton.styleFrom(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      child: isSubmitting
+          ? SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            )
+          : Text(
+              widget.exercise['type'] == 'pdf' ? 'Mark as Complete' : 'Submit',
+              style: TextStyle(fontSize: 18),
+            ),
+    );
+  }
 
   String _getDifficultyText(int level) {
     switch (level) {
@@ -846,5 +1016,153 @@ Widget _buildExerciseInfo() {
       default:
         return Colors.grey;
     }
+  }
+}
+
+// Results Sheet Widget
+class ResultsSheet extends StatelessWidget {
+  final Map<String, dynamic> result;
+  final ScrollController scrollController;
+
+  const ResultsSheet({
+    Key? key,
+    required this.result,
+    required this.scrollController,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(),
+          _buildScoreSection(),
+          _buildCorrection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 12),
+      alignment: Alignment.center,
+      child: Container(
+        width: 40,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.grey[300],
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScoreSection() {
+    final score = result['score'] as double;
+    final isPass = score >= 60;
+
+    return Container(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Text(
+            isPass ? 'Congratulations!' : 'Keep practicing!',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isPass ? Colors.green : Colors.orange,
+            ),
+          ),
+          SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _buildScoreCard(
+                  'Score',
+                  '${score.toStringAsFixed(1)}%',
+                  isPass ? Colors.green : Colors.orange,
+                ),
+              ),
+              SizedBox(width: 16),
+              Expanded(
+                child: _buildScoreCard(
+                  'Correct Answers',
+                  '${result['correct_count']} / ${result['total_questions']}',
+                  Colors.blue,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScoreCard(String title, String value, Color color) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 14,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCorrection() {
+    return Expanded(
+      child: Container(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Correction',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Text(
+                  result['correction'] ?? 'No correction available',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

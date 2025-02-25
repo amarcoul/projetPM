@@ -670,7 +670,7 @@ class _ProgrammePageState extends State<ProgrammePage> {
               tooltip: 'Afficher/Masquer la liste des leçons',
             ),
           if (!isSmallScreen)
-            const SizedBox(width: 48), // Pour aligner avec le bouton menu
+            const SizedBox(width: 48), 
           Expanded(
             child: Text(
               selectedLesson?['titre'] ?? '',

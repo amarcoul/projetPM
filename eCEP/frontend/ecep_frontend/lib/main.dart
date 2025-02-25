@@ -1,10 +1,11 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'home_page.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'screens/eleve/exercice.dart'; 
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
@@ -59,9 +60,19 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   tz.initializeTimeZones();
   initNotifications();
-  runApp(MyApp());
+  
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => ExerciseProvider()..fetchExercises(),
+        ),
+        // Ajoutez d'autres providers si nécessaire
+      ],
+      child: MyApp(),
+    ),
+  );
 }
-
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {

@@ -201,30 +201,49 @@ class Exercise(models.Model):
         (3, 'Difficile')
     ]
     
+    TYPE_CHOICES = [
+        ('quiz', 'Quiz temporisé'),
+        ('pdf', 'Exercice PDF'),
+        ('qcm', 'QCM simple')
+    ]
+    
     title = models.CharField(max_length=255)
     description = models.TextField()
-    subject = models.CharField(max_length=255, null=True, blank=True)  # Ajout du champ subject    type = models.CharField(max_length=50)
+    subject = models.CharField(max_length=255, null=True, blank=True)
+    type = models.CharField(max_length=50, choices=TYPE_CHOICES)
     difficulty_level = models.IntegerField(choices=DIFFICULTY_CHOICES)
-    duration = models.IntegerField(default=0)  # Exprimé en secondes ou minutes
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
-    correction = models.TextField()  # Correction de l'exercice
+    duration = models.IntegerField(default=0)  # En minutes
+    course = models.ForeignKey('Course', on_delete=models.CASCADE)
+    correction = models.TextField()
+    pdf_file = models.FileField(upload_to='exercises/pdf/', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
         return self.title
     
+    def calculate_progress(self, user):
+        progress = StudentProgress.objects.filter(user=user, exercise=self).first()
+        if not progress:
+            return 0
+            
+        if self.type == 'pdf':
+            return 100 if progress.completed else 0
+            
+        return progress.score
+
 class Question(models.Model):
     exercise = models.ForeignKey(Exercise, related_name='questions', on_delete=models.CASCADE)
     text = models.TextField()
-    explanation = models.TextField(blank=True)  # Explication pour la correction
+    explanation = models.TextField(blank=True)
     
     def __str__(self):
         return self.text
+
 class Answer(models.Model):
     question = models.ForeignKey(Question, related_name='answers', on_delete=models.CASCADE)
     text = models.TextField()
     is_correct = models.BooleanField(default=False)
-    explanation = models.TextField(blank=True)  # Explication pourquoi cette réponse est correcte/incorrecte
+    explanation = models.TextField(blank=True)
     
     def __str__(self):
         return self.text
@@ -235,10 +254,10 @@ class StudentProgress(models.Model):
     score = models.FloatField(default=0)
     completed = models.BooleanField(default=False)
     last_attempt = models.DateTimeField(auto_now=True)
+    time_spent = models.IntegerField(default=0)  # En secondes
     
     class Meta:
         unique_together = ['user', 'exercise']
-
 
 class LearningResult(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)

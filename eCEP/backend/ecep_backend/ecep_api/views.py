@@ -1,3 +1,4 @@
+from datetime import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -364,55 +365,61 @@ class ExerciseViewSet(viewsets.ReadOnlyModelViewSet):
 def submit_exercise(request):
     exercise_id = request.data.get('exercise_id')
     answers = request.data.get('answers', [])
+    time_spent = request.data.get('time_spent', 0)  # En secondes
     
-    if not exercise_id:
-        return Response({'error': 'Exercise ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+    exercise = get_object_or_404(Exercise, id=exercise_id)
     
-    try:
-        exercise = Exercise.objects.get(id=exercise_id)
-        correct_count = 0
-        total_questions = exercise.questions.count()
-        
-        for answer in answers:
-            question_id = answer.get('question_id')
-            selected_answers = answer.get('selected_answers', [])
+    # Calcul du score et de la correction
+    total_questions = exercise.questions.count()
+    correct_count = 0
+    correction_text = ""
+    
+    if exercise.type == 'pdf':
+        # Pour les exercices PDF, marquer comme complété
+        score = 100 if request.data.get('completed', False) else 0
+        completed = score == 100
+    else:
+        # Pour les quiz et QCM
+        for answer_data in answers:
+            question = exercise.questions.get(id=answer_data['question_id'])
+            selected_answers = answer_data.get('selected_answers', [])
+            correct_answers = list(question.answers.filter(is_correct=True).values_list('id', flat=True))
             
-            if not question_id:
-                continue  # Ignore les réponses sans question_id
-            
-            try:
-                question = Question.objects.get(id=question_id)
-                correct_answers = set(question.answers.filter(is_correct=True).values_list('id', flat=True))
-                selected_answers = set(selected_answers)
+            # Vérification des réponses
+            if set(selected_answers) == set(correct_answers):
+                correct_count += 1
                 
-                if correct_answers == selected_answers:
-                    correct_count += 1
-            except Question.DoesNotExist:
-                continue  # Ignore les questions non trouvées
-        
+            # Construction du texte de correction
+            correction_text += f"\nQuestion: {question.text}\n"
+            correction_text += "Réponses correctes:\n"
+            for answer in question.answers.filter(is_correct=True):
+                correction_text += f"- {answer.text}"
+                if answer.explanation:
+                    correction_text += f" ({answer.explanation})"
+                correction_text += "\n"
+                
         score = (correct_count / total_questions) * 100 if total_questions > 0 else 0
+        completed = True  # Pour les quiz et QCM, considéré comme complété après soumission
         
-        StudentProgress.objects.update_or_create(
-            user=request.user,
-            exercise=exercise,
-            defaults={
-                'score': score,
-                'completed': True
-            }
-        )
-        
-        return Response({
+    # Mise à jour ou création du progrès
+    progress, created = StudentProgress.objects.update_or_create(
+        user=request.user,
+        exercise=exercise,
+        defaults={
             'score': score,
-            'correct_count': correct_count,
-            'total_questions': total_questions,
-            'correction': exercise.correction
-        })
-        
-    except Exercise.DoesNotExist:
-        return Response({'error': 'Exercise not found'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+            'completed': completed,
+            'time_spent': time_spent,
+            'last_attempt': timezone.now()
+        }
+    )
+    
+    return Response({
+        'score': score,
+        'correct_count': correct_count,
+        'total_questions': total_questions,
+        'correction': correction_text,
+        'completed': completed
+    })
 @api_view(['GET'])
 def get_teacher_courses(request, enseignant_id):
     try:
@@ -601,3 +608,113 @@ def enregistrer_action(request):
 @api_view(['GET'])
 def voir_historique(request0):
     return 0
+@api_view(['GET'])
+def exercises_by_course(request, course_id):
+    exercises = Exercise.objects.filter(course_id=course_id)
+    data = [{"id": ex.id, "title": ex.title} for ex in exercises]
+    return JsonResponse(data, safe=False)
+
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+import json
+from django.http import JsonResponse
+from ecep_api.models import Exercise
+
+@api_view(['POST'])
+@csrf_exempt
+def create_exercise(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        print("Données reçues :", data)  # ✅ Vérifie les données reçues
+
+        try:
+            exercise = Exercise.objects.create(
+                title=data["title"],
+                description=data["description"],
+                subject=data.get("subject", ""),
+                type=data["type"],
+                difficulty_level=data["difficulty_level"],
+                duration=data["duration"],
+                course_id=data["course"],  # Assure-toi que le course_id existe en DB
+                correction=data["correction"],
+                pdf_file=None
+            )
+            print("Exercice enregistré :", exercise)  # ✅ Vérifie l'enregistrement
+            return JsonResponse({"status": "success", "message": "Exercise created"})
+        except Exception as e:
+            print("Erreur :", str(e))  # ✅ Capture l'erreur si elle existe
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+    else:
+        return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
+
+
+@api_view(['POST'])
+def create_historique(request):
+    try:
+        data = json.loads(request.body)
+        user_id = data.get('user_id')
+        action = data.get('action')
+        page = data.get('page')
+        
+        user = get_object_or_404(User, id=user_id)
+        
+        Historique.objects.create(
+            user=user,
+            action=action,
+            page=page
+        )
+        
+        return JsonResponse({'status': 'success'}, status=201)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    
+@api_view(["GET"])
+def get_user_historique(request, user_id):
+    try:
+        user = get_object_or_404(User, id=user_id)
+        historiques = Historique.objects.filter(user=user).order_by('-timestamp')
+        
+        data = []
+        for historique in historiques:
+            # Ajouter une description plus détaillée basée sur l'action
+            action_description = historique.action
+            if historique.action == 'view_course':
+                action_description = f"Consultation d'un cours"
+            elif historique.action == 'complete_exercise':
+                action_description = f"Exercice terminé"
+            # ... autres actions
+            
+            item = {
+                'id': historique.id,
+                'action': historique.action,
+                'action_description': action_description,
+                'page': historique.page,
+                'timestamp': historique.timestamp.isoformat(),
+            }
+            data.append(item)
+        
+        return JsonResponse(data, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+@api_view(["GET"])
+def get_parent_children_courses(request, parent_id):
+    try:
+        parent = get_object_or_404(Parent, id=parent_id)
+        enfants = Eleve.objects.filter(parent=parent)
+
+        cours_suivis = []
+        for enfant in enfants:
+            historiques = LearningHistory.objects.filter(user=enfant.user)
+            for historique in historiques:
+                cours_suivis.append({
+                    "eleve": f"{enfant.user.first_name} {enfant.user.last_name}",
+                    "course": historique.course.titre,
+                    "date": historique.viewed_at.isoformat()
+                })
+
+        return JsonResponse({"cours_suivis": cours_suivis}, safe=False)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

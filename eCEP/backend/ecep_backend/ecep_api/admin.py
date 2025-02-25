@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Answer,Question,StudentProgress,Lecon,Chapitre,Eleve,Etablissement,Parent,Enseignant,User, Course, Exercise, LearningResult, Badge, UserBadge, Exam, ExamExercise, LearningHistory, Payment, Admin
+from .models import Historique,Answer,Question,StudentProgress,Lecon,Chapitre,Eleve,Etablissement,Parent,Enseignant,User, Course, Exercise, LearningResult, Badge, UserBadge, Exam, ExamExercise, LearningHistory, Payment, Admin
 
 admin.site.register(User)
 admin.site.register(Lecon)
@@ -21,3 +21,4 @@ admin.site.register(Enseignant)
 admin.site.register(StudentProgress)
 admin.site.register(Question)
 admin.site.register(Answer)
+admin.site.register(Historique)

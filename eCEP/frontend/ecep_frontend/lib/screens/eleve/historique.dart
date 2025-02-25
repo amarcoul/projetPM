@@ -26,7 +26,7 @@ class _HistoriquePageState extends State<HistoriquePage> {
   Future<void> _fetchHistorique() async {
     try {
       final response = await http.get(
-        Uri.parse("http://127.0.0.1:8000/api/historique/${widget.userId}/"),
+        Uri.parse("http://192.168.100.8:8000/api/historique/${widget.userId}/"),
       );
 
       if (response.statusCode == 200) {
